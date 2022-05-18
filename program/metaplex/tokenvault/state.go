@@ -13,3 +13,9 @@ var (
 	WrappedSolMint = common.PublicKeyFromString("So11111111111111111111111111111111111111112")
 	QuoteMint      = WrappedSolMint
 )
+
+type Token2Add struct {
+	TokenAccount common.PublicKey
+	TokenMint    common.PublicKey
+	Amount       uint64
+}
