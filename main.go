@@ -21,20 +21,14 @@ func main() {
 	c := client.NewClient(rpc.DevnetRPCEndpoint)
 	//externalPriceAccount := createExternalPriceAccount(c)
 	//vault := createVault(c, externalPriceAccount)
-	vault := common.PublicKeyFromString("8Yd9vwE5AQjDPKyT6Wb2ekxL3nkEjNWk3whYVRuRaUPP")
-
-	vaultAuthority, err := tokenvault.GetPdaForVault(vault)
-	if err != nil {
-		log.Fatalf("failed to find a valid vault authority, err: %v", err)
-	}
-	fmt.Printf("vaultAuthority: %v\n", vaultAuthority.ToBase58())
+	vault := common.PublicKeyFromString("8jUEnPcAAAkKgL8oaBnqbj3esfyrFCZyemdydnUqSnAe")
 
 	accountRent, err := c.GetMinimumBalanceForRentExemption(context.Background(), tokenvault.AccountSize)
 	if err != nil {
 		log.Fatalf("failed to get mint account rent, err: %v", err)
 	}
 
-	mint := common.PublicKeyFromString("6VfzKYoMi1WfsDa3DfQTa6LsL4XWg3P1xwxigaaD3nHJ")
+	mint := common.PublicKeyFromString("4jXiQxS8oj3SwbYt4NfmeqVzwXERj3ydm8H9XyRUSsva")
 	tokenAccount, _, err := common.FindAssociatedTokenAddress(feePayer.PublicKey, mint)
 	if err != nil {
 		log.Fatalf("failed to find a valid ata, err: %v", err)
@@ -50,10 +44,16 @@ func main() {
 
 	for _, nft := range nfts {
 
-		/*safetyDepositBox, err := tokenvault.GetSafetyDepositAccount(vault, nft.TokenMint)
+		safetyDepositBox, err := tokenvault.GetSafetyDepositAccount(vault, nft.TokenMint)
 		if err != nil {
-			log.Fatalf("failed to find a valid vault authority, err: %v", err)
-		}*/
+			log.Fatalf("failed to find a valid safetyDepositBox, err: %v", err)
+		}
+		fmt.Printf("safetyDepositBox: %v\n", safetyDepositBox.ToBase58())
+
+		authority, err := tokenvault.GetPdaForVault(vault)
+		if err != nil {
+			log.Fatalf("failed to find a valid  authority, err: %v", err)
+		}
 
 		tokenStoreAccount := types.NewAccount()
 		fmt.Printf("tokenStoreAccount: %v\n", tokenStoreAccount.PublicKey.ToBase58())
@@ -67,7 +67,7 @@ func main() {
 		}
 
 		tx, err := types.NewTransaction(types.NewTransactionParam{
-			Signers: []types.Account{feePayer, tokenStoreAccount},
+			Signers: []types.Account{feePayer, tokenStoreAccount, transferAuthority},
 			Message: types.NewMessage(types.NewMessageParam{
 				FeePayer:        feePayer.PublicKey,
 				RecentBlockhash: res.Blockhash,
@@ -83,7 +83,7 @@ func main() {
 					tokenprog.InitializeAccount(tokenprog.InitializeAccountParam{
 						Account: tokenStoreAccount.PublicKey,
 						Mint:    nft.TokenMint,
-						Owner:   vaultAuthority,
+						Owner:   authority,
 					}),
 					tokenprog.Approve(tokenprog.ApproveParam{
 						From:    nft.TokenAccount,
@@ -91,6 +91,16 @@ func main() {
 						Auth:    feePayer.PublicKey,
 						Signers: nil,
 						Amount:  1,
+					}),
+					tokenvault.AddTokenToInactiveVault(tokenvault.AddTokenToInactiveVaultParam{
+						SafetyDepositAccount: safetyDepositBox,
+						TokenAccount:         tokenAccount,
+						Store:                tokenStoreAccount.PublicKey,
+						Vault:                vault,
+						VaultAuthority:       feePayer.PublicKey,
+						Payer:                feePayer.PublicKey,
+						TransferAuthority:    transferAuthority.PublicKey,
+						Amount:               1,
 					}),
 				},
 			}),
@@ -134,9 +144,9 @@ func createVault(c *client.Client, externalPriceAccount common.PublicKey) common
 	vault := types.NewAccount()
 	fmt.Printf("vault: %v\n", vault.PublicKey.ToBase58())
 
-	vaultAuthority, err := tokenvault.GetPdaForVault(vault.PublicKey)
+	authority, err := tokenvault.GetPdaForVault(vault.PublicKey)
 	if err != nil {
-		log.Fatalf("failed to find a valid vault authority, err: %v", err)
+		log.Fatalf("failed to find a valid authority, err: %v", err)
 	}
 
 	fractionMint := types.NewAccount()
@@ -169,8 +179,8 @@ func createVault(c *client.Client, externalPriceAccount common.PublicKey) common
 				tokenprog.InitializeMint(tokenprog.InitializeMintParam{
 					Decimals:   0,
 					Mint:       fractionMint.PublicKey,
-					MintAuth:   vaultAuthority,
-					FreezeAuth: &vaultAuthority,
+					MintAuth:   authority,
+					FreezeAuth: &authority,
 				}),
 				sysprog.CreateAccount(sysprog.CreateAccountParam{
 					From:     feePayer.PublicKey,
@@ -182,7 +192,7 @@ func createVault(c *client.Client, externalPriceAccount common.PublicKey) common
 				tokenprog.InitializeAccount(tokenprog.InitializeAccountParam{
 					Account: redeemTreasury.PublicKey,
 					Mint:    tokenvault.QuoteMint,
-					Owner:   vaultAuthority,
+					Owner:   authority,
 				}),
 				sysprog.CreateAccount(sysprog.CreateAccountParam{
 					From:     feePayer.PublicKey,
@@ -194,7 +204,7 @@ func createVault(c *client.Client, externalPriceAccount common.PublicKey) common
 				tokenprog.InitializeAccount(tokenprog.InitializeAccountParam{
 					Account: fractionTreasury.PublicKey,
 					Mint:    fractionMint.PublicKey,
-					Owner:   vaultAuthority,
+					Owner:   authority,
 				}),
 				sysprog.CreateAccount(sysprog.CreateAccountParam{
 					From:     feePayer.PublicKey,
@@ -205,7 +215,7 @@ func createVault(c *client.Client, externalPriceAccount common.PublicKey) common
 				}),
 				tokenvault.InitVault(tokenvault.InitVaultParam{
 					Vault:                     vault.PublicKey,
-					VaultAuthority:            vaultAuthority,
+					VaultAuthority:            feePayer.PublicKey,
 					FractionMint:              fractionMint.PublicKey,
 					RedeemTreasury:            redeemTreasury.PublicKey,
 					FractionTreasury:          fractionTreasury.PublicKey,
@@ -222,6 +232,11 @@ func createVault(c *client.Client, externalPriceAccount common.PublicKey) common
 	txhash, err := c.SendTransaction(context.Background(), tx)
 	if err != nil {
 		log.Fatalf("send tx error, err: %v\n", err)
+	}
+
+	err = getTransaction(context.Background(), c, txhash)
+	if err != nil {
+		log.Fatalf("Get tx error, err: %v\n", err)
 	}
 
 	log.Println("txhash:", txhash)

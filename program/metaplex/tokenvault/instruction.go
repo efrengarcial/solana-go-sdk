@@ -19,6 +19,7 @@ type Instruction uint8
 
 const (
 	InstructionInitVault                  Instruction = 0
+	InstructionAddTokenToInactiveVault    Instruction = 1
 	InstructionUpdateExternalPriceAccount Instruction = 9
 )
 
@@ -121,6 +122,86 @@ func InitVault(param InitVaultParam) types.Instruction {
 			},
 			{
 				PubKey:     common.SysVarRentPubkey,
+				IsSigner:   false,
+				IsWritable: false,
+			},
+		},
+		Data: data,
+	}
+}
+
+type AddTokenToInactiveVaultParam struct {
+	SafetyDepositAccount common.PublicKey
+	TokenAccount         common.PublicKey
+	Store                common.PublicKey
+	Vault                common.PublicKey
+	VaultAuthority       common.PublicKey
+	Payer                common.PublicKey
+	TransferAuthority    common.PublicKey
+	Amount               uint64
+}
+
+func AddTokenToInactiveVault(param AddTokenToInactiveVaultParam) types.Instruction {
+	data, err := borsh.Serialize(struct {
+		Instruction Instruction
+		Amount      uint64
+	}{
+		Instruction: InstructionAddTokenToInactiveVault,
+		Amount:      param.Amount,
+	})
+	if err != nil {
+		panic(err)
+	}
+	return types.Instruction{
+		ProgramID: common.MetaplexVaultProgramID,
+		Accounts: []types.AccountMeta{
+			{
+				PubKey:     param.SafetyDepositAccount,
+				IsSigner:   false,
+				IsWritable: true,
+			},
+			{
+				PubKey:     param.TokenAccount,
+				IsSigner:   false,
+				IsWritable: true,
+			},
+			{
+				PubKey:     param.Store,
+				IsSigner:   false,
+				IsWritable: true,
+			},
+			{
+				PubKey:     param.Vault,
+				IsSigner:   false,
+				IsWritable: true,
+			},
+			{
+				PubKey:     param.VaultAuthority,
+				IsSigner:   true,
+				IsWritable: false,
+			},
+			{
+				PubKey:     param.Payer,
+				IsSigner:   true,
+				IsWritable: false,
+			},
+			{
+				PubKey:     param.TransferAuthority,
+				IsSigner:   true,
+				IsWritable: false,
+			},
+			{
+				PubKey:     common.TokenProgramID,
+				IsSigner:   false,
+				IsWritable: false,
+			},
+			{
+				PubKey:     common.SysVarRentPubkey,
+				IsWritable: false,
+				IsSigner:   false,
+			},
+			{
+				PubKey:     common.SystemProgramID,
 				IsSigner:   false,
 				IsWritable: false,
 			},
